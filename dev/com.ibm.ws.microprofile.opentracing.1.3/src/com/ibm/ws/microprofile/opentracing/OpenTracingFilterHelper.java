@@ -10,6 +10,8 @@
  *******************************************************************************/
 package com.ibm.ws.microprofile.opentracing;
 
+import java.lang.reflect.Method;
+
 import javax.ws.rs.Path;
 import javax.ws.rs.client.ClientRequestContext;
 import javax.ws.rs.client.ClientRequestFilter;
@@ -40,10 +42,82 @@ public class OpenTracingFilterHelper implements OpentracingFilterHelper {
     //
     @Override
     public String getBuildSpanName(ClientRequestContext clientRequestContext) {
-        // "The default operation name of the new Span for the outgoing request is
-        // <HTTP method>"
-        // https://github.com/eclipse/microprofile-opentracing/blob/master/spec/src/main/asciidoc/microprofile-opentracing.asciidoc#client-span-name
-        return clientRequestContext.getMethod();
+        Object invokedMethod = clientRequestContext.getProperty("org.eclipse.microprofile.rest.client.invokedMethod");
+
+        //FW
+        Tr.debug(tc, "FW invokedMethod=" + invokedMethod);
+
+        if (invokedMethod != null) {
+            Method method = (Method) invokedMethod;
+            String methodOperationName = OpenTracingService.getMethodOperationName(method);
+            if (OpenTracingService.hasExplicitOperationName(methodOperationName)) {
+                return methodOperationName;
+            }
+            String classOperationName = OpenTracingService.getClassOperationName(method);
+            if (OpenTracingService.hasExplicitOperationName(classOperationName)) {
+                return classOperationName;
+            }
+
+            //FW
+            Tr.debug(tc, "FW client isOperationNameProviderHttpPath=" + OpentracingConfiguration.isOperationNameProviderHttpPath());
+
+            if (OpentracingConfiguration.isOperationNameProviderHttpPath()) {
+
+                //FW
+                Tr.debug(tc, "FW http-path method=" + method.getName());
+
+                StringBuilder operationNameSB = new StringBuilder();
+
+                String classPathValue = null;
+                if (method.getClass().isAnnotationPresent(Path.class)) {
+                    classPathValue = method.getClass().getAnnotation(Path.class).value();
+                }
+                String methodPathValue = null;
+                if (method.isAnnotationPresent(Path.class)) {
+                    methodPathValue = method.getAnnotation(Path.class).value();
+                }
+
+                operationNameSB.append(clientRequestContext.getMethod().toUpperCase());
+
+                boolean isColonAdded = false;
+
+                if ((classPathValue != null) && (classPathValue.length() > 0)) {
+                    if (!isColonAdded) {
+                        operationNameSB.append(":");
+                        isColonAdded = true;
+                    }
+                    if (!classPathValue.startsWith("/")) {
+                        operationNameSB.append("/");
+                    }
+                    operationNameSB.append(classPathValue);
+                }
+
+                if ((methodPathValue != null) && (methodPathValue.length() > 0)) {
+                    if (!isColonAdded) {
+                        operationNameSB.append(":");
+                    }
+                    if (!methodPathValue.startsWith("/")) {
+                        operationNameSB.append("/");
+                    }
+                    operationNameSB.append(methodPathValue);
+                }
+
+                return operationNameSB.toString();
+            } else {
+                //FW
+                Tr.debug(tc, "FW class-method method=" + method.getName());
+
+                return clientRequestContext.getMethod() + ":"
+                       + method.getDeclaringClass().getName() + "."
+                       + method.getName();
+            }
+
+        } else {
+            // "The default operation name of the new Span for the outgoing request is
+            // <HTTP method>"
+            // https://github.com/eclipse/microprofile-opentracing/blob/master/spec/src/main/asciidoc/microprofile-opentracing.asciidoc#client-span-name
+            return clientRequestContext.getMethod();
+        }
     }
 
     //
@@ -78,6 +152,9 @@ public class OpenTracingFilterHelper implements OpentracingFilterHelper {
             // for all methods of the class unless a method explicitly overrides it with
             // its own operationName."
             // https://github.com/eclipse/microprofile-opentracing/blob/master/spec/src/main/asciidoc/microprofile-opentracing.asciidoc#server-span-name
+
+            //FW
+            Tr.debug(tc, "FW server isOperationNameProviderHttpPath=" + OpentracingConfiguration.isOperationNameProviderHttpPath());
 
             if (OpenTracingService.hasExplicitOperationName(classOperationName)) {
                 operationName = classOperationName;

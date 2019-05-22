@@ -46,6 +46,10 @@ public class OpentracingRestClientFilter implements ClientRequestFilter, ClientR
     @Override
     public void filter(ClientRequestContext clientRequestContext) throws IOException {
         Object invokedMethod = clientRequestContext.getProperty("org.eclipse.microprofile.rest.client.invokedMethod");
+
+        //FW
+        Tr.debug(tc, "FW invokedMethod=" + invokedMethod);
+
         if (invokedMethod != null) {
             Method method = (Method) invokedMethod;
             Traced traced = method.getAnnotation(Traced.class);
