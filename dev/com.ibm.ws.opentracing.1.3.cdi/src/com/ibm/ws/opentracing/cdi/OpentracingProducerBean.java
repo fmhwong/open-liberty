@@ -12,13 +12,13 @@ package com.ibm.ws.opentracing.cdi;
 
 import javax.enterprise.inject.Produces;
 
-import com.ibm.ws.opentracing.OpentracingTracerManager;
-
-import io.opentracing.Tracer;
+import io.opentelemetry.OpenTelemetry;
+import io.opentelemetry.opentracingshim.TracerShim;
 
 public class OpentracingProducerBean {
     @Produces
-    public Tracer getTracer() {
-        return OpentracingTracerManager.getTracer();
+    public TracerShim getTracer() {
+//        return OpentracingTracerManager.getTracer();
+        return new TracerShim(OpenTelemetry.getTracer());
     }
 }

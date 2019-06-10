@@ -33,9 +33,12 @@ import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.ws.opentracing.filters.SpanFilterType;
 
+import io.opentelemetry.OpenTelemetry;
+import io.opentelemetry.opentracingshim.TracerShim;
+import io.opentelemetry.trace.Tracer;
 import io.opentracing.Scope;
 import io.opentracing.SpanContext;
-import io.opentracing.Tracer;
+import io.opentracing.Tracer.SpanBuilder;
 import io.opentracing.propagation.Format;
 import io.opentracing.propagation.TextMap;
 import io.opentracing.tag.Tags;
@@ -74,7 +77,8 @@ public class OpentracingContainerFilter implements ContainerRequestFilter, Conta
     public void filter(ContainerRequestContext incomingRequestContext) throws IOException {
         String methodName = "filter(incoming)";
 
-        Tracer tracer = OpentracingTracerManager.getTracer();
+        Tracer tracer = OpenTelemetry.getTracer();
+        TracerShim tracerShim = new TracerShim(tracer);
         if (tracer == null) {
             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
                 Tr.debug(tc, methodName + " no tracer");
@@ -82,7 +86,7 @@ public class OpentracingContainerFilter implements ContainerRequestFilter, Conta
             return;
         } else {
             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                Tr.debug(tc, methodName, OpentracingUtils.getTracerText(tracer));
+                Tr.debug(tc, methodName, OpentracingUtils.getTracerText(tracerShim));
             }
         }
 
@@ -97,8 +101,8 @@ public class OpentracingContainerFilter implements ContainerRequestFilter, Conta
             Tr.debug(tc, methodName + " incomingURL", incomingURL);
         }
 
-        SpanContext priorOutgoingContext = tracer.extract(Format.Builtin.HTTP_HEADERS,
-                                                          new MultivaluedMapToTextMap(incomingRequestContext.getHeaders()));
+        SpanContext priorOutgoingContext = tracerShim.extract(Format.Builtin.HTTP_HEADERS,
+                                                              new MultivaluedMapToTextMap(incomingRequestContext.getHeaders()));
 
         if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
             Tr.debug(tc, methodName + " priorContext", priorOutgoingContext);
@@ -120,7 +124,7 @@ public class OpentracingContainerFilter implements ContainerRequestFilter, Conta
         }
 
         if (process) {
-            Tracer.SpanBuilder spanBuilder = tracer.buildSpan(buildSpanName);
+            SpanBuilder spanBuilder = tracerShim.buildSpan(buildSpanName);
             spanBuilder.withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_SERVER);
             spanBuilder.withTag(Tags.HTTP_URL.getKey(), incomingURL);
             spanBuilder.withTag(Tags.HTTP_METHOD.getKey(), incomingRequestContext.getMethod());

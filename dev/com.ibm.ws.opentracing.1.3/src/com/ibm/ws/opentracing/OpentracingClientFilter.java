@@ -25,10 +25,13 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Trivial;
 
+import io.opentelemetry.OpenTelemetry;
+import io.opentelemetry.opentracingshim.TracerShim;
+import io.opentelemetry.trace.Tracer;
 import io.opentracing.References;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
-import io.opentracing.Tracer;
+import io.opentracing.Tracer.SpanBuilder;
 import io.opentracing.propagation.Format;
 import io.opentracing.propagation.TextMap;
 import io.opentracing.tag.Tags;
@@ -89,7 +92,10 @@ public class OpentracingClientFilter implements ClientRequestFilter, ClientRespo
     public void filter(ClientRequestContext clientRequestContext) throws IOException {
         String methodName = "filter(outgoing)";
 
-        Tracer tracer = OpentracingTracerManager.getTracer();
+//        Tracer tracer = OpentracingTracerManager.getTracer();
+        Tracer tracer = OpenTelemetry.getTracer();
+        TracerShim tracerShim = new TracerShim(tracer);
+
         if (tracer == null) {
             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
                 Tr.debug(tc, methodName + " no tracer");
@@ -97,7 +103,7 @@ public class OpentracingClientFilter implements ClientRequestFilter, ClientRespo
             return;
         } else {
             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
-                Tr.debug(tc, methodName, OpentracingUtils.getTracerText(tracer));
+                Tr.debug(tc, methodName, OpentracingUtils.getTracerText(tracerShim));
             }
         }
 
@@ -116,7 +122,7 @@ public class OpentracingClientFilter implements ClientRequestFilter, ClientRespo
 
         if (process) {
             String buildSpanName = helper != null ? helper.getBuildSpanName(clientRequestContext) : outgoingURL;
-            Tracer.SpanBuilder spanBuilder = tracer.buildSpan(buildSpanName);
+            SpanBuilder spanBuilder = tracerShim.buildSpan(buildSpanName);
 
             spanBuilder.withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_CLIENT);
             spanBuilder.withTag(Tags.HTTP_URL.getKey(), outgoingURL);
@@ -137,18 +143,22 @@ public class OpentracingClientFilter implements ClientRequestFilter, ClientRespo
             try (AutoFinishScope scope = AUTO_FINISH_SCOPE_MANAGER.activate(span, true)) {
                 Continuation continuation = scope.capture();
 
-                tracer.inject(
-                              scope.span().context(),
-                              Format.Builtin.HTTP_HEADERS, new MultivaluedMapToTextMap(clientRequestContext.getHeaders()));
+//                tracer.inject(
+//                              scope.span().context(),
+//                              Format.Builtin.HTTP_HEADERS, new MultivaluedMapToTextMap(clientRequestContext.getHeaders()));
+                tracerShim.inject(
+                                  scope.span().context(),
+                                  Format.Builtin.HTTP_HEADERS, new MultivaluedMapToTextMap(clientRequestContext.getHeaders()));
 
                 clientRequestContext.setProperty(CLIENT_CONTINUATION_PROP_ID, continuation);
             }
         } else {
-            Span currentSpan = tracer.activeSpan();
+//            Span currentSpan = tracer.activeSpan();
+            Span currentSpan = tracerShim.activeSpan();
             if (currentSpan != null) {
-                tracer.inject(
-                              currentSpan.context(),
-                              Format.Builtin.HTTP_HEADERS, new MultivaluedMapToTextMap(clientRequestContext.getHeaders()));
+                tracerShim.inject(
+                                  currentSpan.context(),
+                                  Format.Builtin.HTTP_HEADERS, new MultivaluedMapToTextMap(clientRequestContext.getHeaders()));
             }
         }
 

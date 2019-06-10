@@ -12,7 +12,7 @@ package com.ibm.ws.opentracing;
 
 import com.ibm.websphere.ras.annotation.Trivial;
 
-import io.opentracing.Tracer;
+import io.opentelemetry.trace.Tracer;
 
 /**
  * <p>Open tracing context information: Values associated with an incoming request

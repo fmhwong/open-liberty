@@ -107,46 +107,46 @@ public class OpentracingTracerManager {
      *
      * @Return The tracer of the active open tracing context.
      */
-    @Trivial
-    public static Tracer getTracer() {
-        String methodName = "getTracer";
-        if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
-            Tr.entry(tc, methodName);
-        }
-
-        OpentracingContext tracerContext = getOpentracingContext();
-        // Should never be null.  The thread local variable provides
-        // a non-null initial value.
-
-        String appName = tracerContext.getAppName();
-        Tracer tracer = tracerContext.getTracer();
-        String tracerCase;
-
-        // The app name and tracer should always be null when requesting
-        // the tracer from a container filter, and should never be null
-        // when requesting the tracer from a client filter.
-
-        if (tracer != null) {
-            tracerCase = "previously stored for " + appName;
-
-        } else {
-            appName = OpentracingUtils.lookupAppName();
-            tracer = ensureTracer(appName);
-            tracerContext.setTracer(appName, tracer);
-
-            tracerCase = "newly stored for " + appName;
-        }
-
-        if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
-            Thread currentThread = Thread.currentThread();
-            String threadName = currentThread.getName();
-            long threadId = currentThread.getId();
-            Tr.exit(tc,
-                    methodName + " (" + tracerCase + ") in (" + threadName + ":" + Long.toString(threadId) + ")",
-                    OpentracingUtils.getTracerText(tracer));
-        }
-        return tracer;
-    }
+//    @Trivial
+//    public static Tracer getTracer() {
+//        String methodName = "getTracer";
+//        if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
+//            Tr.entry(tc, methodName);
+//        }
+//
+//        OpentracingContext tracerContext = getOpentracingContext();
+//        // Should never be null.  The thread local variable provides
+//        // a non-null initial value.
+//
+//        String appName = tracerContext.getAppName();
+//        Tracer tracer = tracerContext.getTracer();
+//        String tracerCase;
+//
+//        // The app name and tracer should always be null when requesting
+//        // the tracer from a container filter, and should never be null
+//        // when requesting the tracer from a client filter.
+//
+//        if (tracer != null) {
+//            tracerCase = "previously stored for " + appName;
+//
+//        } else {
+//            appName = OpentracingUtils.lookupAppName();
+//            tracer = ensureTracer(appName);
+//            tracerContext.setTracer(appName, tracer);
+//
+//            tracerCase = "newly stored for " + appName;
+//        }
+//
+//        if (TraceComponent.isAnyTracingEnabled() && tc.isEntryEnabled()) {
+//            Thread currentThread = Thread.currentThread();
+//            String threadName = currentThread.getName();
+//            long threadId = currentThread.getId();
+//            Tr.exit(tc,
+//                    methodName + " (" + tracerCase + ") in (" + threadName + ":" + Long.toString(threadId) + ")",
+//                    OpentracingUtils.getTracerText(tracer));
+//        }
+//        return tracer;
+//    }
 
     /**
      * <p>Answer the active open tracing context.</p>
