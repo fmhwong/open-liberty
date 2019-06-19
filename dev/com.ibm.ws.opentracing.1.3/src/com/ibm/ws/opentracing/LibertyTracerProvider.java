@@ -13,7 +13,8 @@ package com.ibm.ws.opentracing;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.ibm.websphere.ras.annotation.Trivial;
+import com.ibm.websphere.ras.Tr;
+import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.opentracing.tracer.OpenTelemetryTracer;
 
 import io.opentelemetry.trace.Tracer;
@@ -24,6 +25,8 @@ import io.opentracing.Span;
  *
  */
 public class LibertyTracerProvider implements TracerProvider {
+
+    private static final TraceComponent tc = Tr.register(LibertyTracerProvider.class);
 
     /** <p>Storage for the open tracing context variable.</p> */
     private static final ThreadLocal<OpentracingContext> OPEN_TRACING_CONTEXT_VAR = new OpentracingThreadLocal();
@@ -84,7 +87,6 @@ public class LibertyTracerProvider implements TracerProvider {
         return tracer;
     }
 
-    @Trivial
     private static Tracer ensureTracer(String appName) {
 
         Tracer tracer;
@@ -108,22 +110,18 @@ public class LibertyTracerProvider implements TracerProvider {
      *
      * @return The new tracer.
      */
-    @Trivial
     private static Tracer createTracer(String appName) {
         return new OpenTelemetryTracer();
     }
 
-    @Trivial
     private static Tracer getTracer(String appName) {
         return tracerMap.get(appName);
     }
 
-    @Trivial
     private static Tracer putTracer(String appName, Tracer tracer) {
         return tracerMap.put(appName, tracer);
     }
 
-    @Trivial
     private static Tracer removeTracer(String appName, Tracer tracer) {
         return tracerMap.remove(appName);
     }
@@ -150,7 +148,6 @@ public class LibertyTracerProvider implements TracerProvider {
      *
      * @return The active open tracing context. This should never be null.
      */
-    @Trivial
     private static OpentracingContext getOpentracingContext() {
         return OPEN_TRACING_CONTEXT_VAR.get();
         // Rely on 'initialValue' to supply a non-null open tracing context.

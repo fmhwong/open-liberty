@@ -26,10 +26,11 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.microprofile.opentracing.OpenTracingService;
 import com.ibm.ws.opentracing.OpentracingService;
-import com.ibm.ws.opentracing.OpentracingTracerManager;
 
+import io.opentelemetry.OpenTelemetry;
+import io.opentelemetry.opentracingshim.TracerShim;
+import io.opentelemetry.trace.Tracer;
 import io.opentracing.Scope;
-import io.opentracing.Tracer;
 
 /**
  * {@code #execute(InvocationContext)} is called for every method with the {@code Traced} annotation
@@ -106,9 +107,11 @@ public class TracedInterceptor {
                 }
             }
 
-            Tracer tracer = OpentracingTracerManager.getTracer();
+//            Tracer tracer = OpentracingTracerManager.getTracer();
+            Tracer tracer = OpenTelemetry.getTracer();
+            TracerShim tracerShim = new TracerShim(tracer);
 
-            try (Scope scope = tracer.buildSpan(operationName).startActive(true)) {
+            try (Scope scope = tracerShim.buildSpan(operationName).startActive(true)) {
                 try {
                     Object result = context.proceed();
                     return result;
