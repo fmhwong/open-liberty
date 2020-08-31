@@ -14,12 +14,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
 
-import com.ibm.ws.logstash.collector.tests.CustomizedTagTest;
-import com.ibm.ws.logstash.collector.tests.LogStashWithBinaryLoggingTest;
 import com.ibm.ws.logstash.collector.tests.LogsStashSSLTest;
-import com.ibm.ws.logstash.collector.tests.LogstashCollectorIndependentTest;
-import com.ibm.ws.logstash.collector.tests.MaxFieldLengthTest;
-import com.ibm.ws.logstash.collector.tests.ThrottleMaxEventsTest;
 
 import componenttest.custom.junit.runner.AlwaysPassesTest;
 
@@ -39,12 +34,12 @@ import componenttest.custom.junit.runner.AlwaysPassesTest;
 //               ValidateBlockUrlFromAdminCenterTest.class,
 //               CollectorToEngineInCollectiveTest.class,
 //               ValidateFFDCLogTest_full.class
-                CustomizedTagTest.class,
-                ThrottleMaxEventsTest.class,
-                LogsStashSSLTest.class,
-                MaxFieldLengthTest.class,
-                LogStashWithBinaryLoggingTest.class,
-                LogstashCollectorIndependentTest.class
+//                CustomizedTagTest.class,
+//                ThrottleMaxEventsTest.class,
+                LogsStashSSLTest.class
+//                MaxFieldLengthTest.class,
+//                LogStashWithBinaryLoggingTest.class,
+//                LogstashCollectorIndependentTest.class
 
 })
 
