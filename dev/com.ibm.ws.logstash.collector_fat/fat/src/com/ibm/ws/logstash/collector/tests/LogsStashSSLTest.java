@@ -16,16 +16,13 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.util.List;
 
-import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.output.OutputFrame;
-import org.testcontainers.utility.MountableFile;
+import org.testcontainers.containers.output.ToStringConsumer;
 
 import com.ibm.websphere.simplicity.Machine;
 import com.ibm.websphere.simplicity.RemoteFile;
@@ -49,75 +46,74 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
 
     private String testName = "";
     private static Class<?> c = LogsStashSSLTest.class;
-    private static String JVMSecurity = System.getProperty("Djava.security.properties");
-    public static String pathToAutoFVTTestFiles = "lib/LibertyFATTestFiles/";
     private static String os = "";
 
-    protected static boolean runTest;
+    protected static boolean runTest = true;
 
-    // Can be added to the FATSuite to make the resource lifecycle bound to the entire
-    // FAT bucket. Or, you can add this to any JUnit test class and the container will
-    // be started just before the @BeforeClass and stopped after the @AfterClass
-    @ClassRule
-    public static GenericContainer<?> logstashContainer = new GenericContainer<>("docker.elastic.co/logstash/logstash:7.2.0") //
-                    .withExposedPorts(5043) //
-                    .withCopyFileToContainer(MountableFile.forHostPath("logstash.conf"), "/usr/share/logstash/pipeline/logstash.conf") //
-                    .withCopyFileToContainer(MountableFile.forHostPath("logstash.yml"), "/usr/share/logstash/config/logstash.yml") //
-                    .withCopyFileToContainer(MountableFile.forHostPath("ca.key"), "/usr/share/logstash/config/ca.key") //
-                    .withCopyFileToContainer(MountableFile.forHostPath("ca.crt"), "/usr/share/logstash/config/ca.crt") //
-                    .withLogConsumer(LogsStashSSLTest::log);
+    private static ToStringConsumer strConsumer = new ToStringConsumer();
 
-    private static StringBuilder logstashOutput = new StringBuilder();
-
-    // This helper method is passed into `withLogConsumer()` of the container
-    // It will consume all of the logs (System.out) of the container, which we will
-    // use to pipe container output to our standard FAT output logs (output.txt)
-    private static void log(OutputFrame frame) {
-        String msg = frame.getUtf8String();
-        logstashOutput.append(msg);
-        if (msg.endsWith("\n"))
-            msg = msg.substring(0, msg.length() - 1);
-        Log.info(c, "somecontainer", msg);
-    }
-
-    private static void clearOutput() {
-        logstashOutput = new StringBuilder();
-    }
-
-    private static String waitForStringInOutput(String str) {
-        String line = null;
-        int startline = 0;
-        int timeout = 120 * 1000; // 120 seconds
-        while ((timeout > 0) && (line == null)) {
-            String output = logstashContainer.toString();
-            String[] lines = output.split(System.getProperty("line.separator"));
-            for (int i = startline; i < lines.length; i++) {
-                if (lines[i].indexOf(str) > 0) {
-                    return lines[i];
-                }
-            }
-            startline = lines.length;
-            timeout -= 1000;
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }
-        return line;
-    }
-
+/*
+ * // Can be added to the FATSuite to make the resource lifecycle bound to the entire
+ * // FAT bucket. Or, you can add this to any JUnit test class and the container will
+ * // be started just before the @BeforeClass and stopped after the @AfterClass
+ *
+ * @ClassRule
+ * public static GenericContainer<?> logstashContainer = new GenericContainer<>("docker.elastic.co/logstash/logstash:7.2.0") //
+ * .withExposedPorts(5043) //
+ * .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.conf"), "/usr/share/logstash/pipeline/") //
+ * .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.yml"), "/usr/share/logstash/config/") //
+ * .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.key"), "/usr/share/logstash/config/") //
+ * .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.crt"), "/usr/share/logstash/config/") //
+ * .withLogConsumer(LogsStashSSLTest::log); //
+ *
+ * private static ArrayList<String> logstashOutput = new ArrayList<String>();
+ *
+ * // This helper method is passed into `withLogConsumer()` of the container
+ * // It will consume all of the logs (System.out) of the container, which we will
+ * // use to pipe container output to our standard FAT output logs (output.txt)
+ * private static void log(OutputFrame frame) {
+ * String msg = frame.getUtf8String();
+ * if (msg.endsWith("\n"))
+ * msg = msg.substring(0, msg.length() - 1);
+ * logstashOutput.add(msg);
+ * Log.info(c, "logstashContainer", msg);
+ * }
+ *
+ * private static void clearOutput() {
+ * logstashOutput.clear();
+ * }
+ *
+ * private static String waitForStringInOutput(String str) {
+ * Log.info(c, "waitForStringInOutput", "looking for " + str);
+ * int timeout = 30 * 1000; // 30 seconds
+ * while (timeout > 0) {
+ * for (String line : logstashOutput) {
+ * Log.info(c, "waitForStringInOutput", line);
+ * if (line.contains(str)) {
+ * return line;
+ * }
+ * }
+ * timeout -= 1000;
+ * try {
+ * Thread.sleep(1000);
+ * } catch (InterruptedException e) {
+ * }
+ * }
+ * return null; // timed out and not found
+ * }
+ */
     @BeforeClass
     public static void setUp() throws Exception {
         os = System.getProperty("os.name").toLowerCase();
         Log.info(c, "setUp", "os.name = " + os);
 
         String host = logstashContainer.getContainerIpAddress();
-        String port = String.valueOf(logstashContainer.getMappedPort(5984));
-        Log.info(c, "setUp", "Logstaash container: host=" + host + "  port=" + port);
+        String port = String.valueOf(logstashContainer.getMappedPort(5043));
+        Log.info(c, "setUp", "Logstash container: host=" + host + "  port=" + port);
         server.addEnvVar("LOGSTASH_HOST", host);
         server.addEnvVar("LOGSTASH_PORT", port);
+
+        logstashContainer.followOutput(strConsumer);
 
         // Change the logstash config file so that the SSL tests create their own output file.
         Logstash.CONFIG_FILENAME = "logstash.conf";
@@ -134,24 +130,27 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
         ShrinkHelper.defaultDropinApp(server, "LogstashApp", "com.ibm.logs");
 
         serverStart();
+        Log.info(c, "setUo", "end");
     }
 
     @Before
     public void setUpTest() throws Exception {
         Assume.assumeTrue(runTest); // runTest must be true to run test
+    }
 
-        testName = "setUpTest";
-        if (!server.isStarted()) {
-            serverStart();
-        }
+    @AfterClass
+    public static void tearDown() throws Exception {
+        Log.info(c, "tearDown", "begin");
+        // Expected errors:
+        // SRVE0777E - NPE thrown by test application
+        server.stopServer("SRVE0777E");
+        Log.info(c, "tearDown", "end");
     }
 
     @Test
     //@Ignore("Ignoring testLogstashDefaultConfig for now, need to rewrite the logic later")
     public void testLogstashDefaultConfig() throws Exception {
         testName = "testLogstashDefaultConfig";
-        server.setMarkToEndOfLog();
-
         setConfig("server_default_conf.xml");
         clearOutput();
         // Run App to generate events
@@ -159,7 +158,6 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
         for (int i = 1; i <= 10; i++) {
             createMessageEvent(testName + " " + i);
         }
-
         assertNotNull("Cannot find TRAS0218I from messages.log", server.waitForStringInLogUsingMark("TRAS0218I", 10000));
         assertNotNull("Cannot find message " + testName + " from Logstash output", waitForStringInOutput(testName));
     }
@@ -180,48 +178,37 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
     @AllowedFFDC({ "java.lang.NullPointerException" })
     public void testLogstashEvents() throws Exception {
         testName = "testLogstashEvents";
-
-        server.setMarkToEndOfLog();
         setConfig("server_logs_all.xml");
-
         clearOutput();
-
+        Log.info(c, "testLogstashEvents", strConsumer.toUtf8String());
         createMessageEvent(testName);
         assertNotNull(waitForStringInOutput(LIBERTY_MESSAGE));
+        Log.info(c, "testLogstashEvents", strConsumer.toUtf8String());
         createTraceEvent();
-        assertNotNull(waitForStringInOutput("LIBERTY_TRACE"));
+        Log.info(c, "testLogstashEvents", strConsumer.toUtf8String());
+        assertNotNull(waitForStringInOutput(LIBERTY_TRACE));
         createFFDCEvent(1);
-        assertNotNull(waitForStringInOutput("LIBERTY_FFDC"));
+        Log.info(c, "testLogstashEvents", strConsumer.toUtf8String());
+        assertNotNull(waitForStringInOutput(LIBERTY_FFDC));
         assertNotNull(waitForStringInOutput(LIBERTY_ACCESSLOG));
     }
 
     @Test
     public void testLogstashForMessageEvent() throws Exception {
         testName = "testLogstashForMessageEvent";
-        server.setMarkToEndOfLog();
         setConfig("server_logs_msg.xml");
+        clearOutput();
         createMessageEvent(testName);
         assertNotNull("Cannot find TRAS0218I from messages.log", server.waitForStringInLogUsingMark("TRAS0218I", 10000));
 
-        boolean found = false;
-        int timeout = 0;
-        try {
-            while (!(found = waitForStringInOutput(LIBERTY_MESSAGE).equals(testName)) && timeout < 120000) {
-                timeout += 1000;
-                Thread.sleep(1000);
-            }
-            Log.info(c, testName, "------> found message event types : " + found);
-        } catch (Exception e) {
-            Log.info(c, testName, "------>Exception occured while reading logstash output file : \n" + e.getMessage());
-        }
-        assertTrue("Did not find message log events..", found);
+        assertNotNull("Did not find " + LIBERTY_MESSAGE, waitForStringInOutput(LIBERTY_MESSAGE));
     }
 
     @Test
     public void testLogstashForAccessEvent() throws Exception {
         testName = "testLogstashForAccessEvent";
-        server.setMarkToEndOfLog();
         setConfig("server_logs_access.xml");
+        clearOutput();
         createAccessLogEvent(testName);
         assertNotNull("Cannot find TRAS0218I from messages.log", server.waitForStringInLogUsingMark("TRAS0218I", 10000));
 
@@ -300,9 +287,8 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
     @Test
     public void testLogstashForTraceEvent() throws Exception {
         testName = "testLogstashForTraceEvent";
-        server.setMarkToEndOfLog();
-        clearOutput();
         setConfig("server_logs_trace.xml");
+        clearOutput();
         createTraceEvent(testName);
 
         boolean found = false;
@@ -318,9 +304,8 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
     @Test
     public void testLogstashForAuditEvent() throws Exception {
         testName = "testLogstashForAuditEvent";
-        server.setMarkToEndOfLog();
-        clearOutput();
         setConfig("server_logs_audit.xml");
+        clearOutput();
         createTraceEvent(testName);
 
         boolean found = false;
@@ -336,7 +321,6 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
     @Test
     public void testLogstashEntryExitEvents() throws Exception {
         testName = "testLogstashEntryExitEvents";
-        server.setMarkToEndOfLog();
         setConfig("server_logs_trace.xml");
         clearOutput();
         createTraceEvent(testName);
@@ -355,7 +339,6 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
     @Test
     public void testLogstashDynamicDisableFeature() throws Exception {
         testName = "testLogstashDynamicDisableFeature";
-        server.setMarkToEndOfLog();
         setConfig("server_disable.xml");
         server.waitForStringInLogUsingMark("CWWKF0013I", 10000);
 
@@ -478,15 +461,6 @@ public class LogsStashSSLTest extends LogstashCollectorTest {
         lines = server.findStringsInLogsAndTraceUsingMark("listOfSourcesToSubscribe.\\[com\\.ibm\\.ws\\.http\\.logging\\.source\\.accesslog\\|memory\\]");
         Log.info(c, testName, "Number of lines containing \"listOfSourcesToSubscribe.\\[com\\.ibm\\.ws\\.http\\.logging\\.source\\.accesslog\\|memory\\]\":" + lines.size());
         assertTrue("AccessLog source was not subscribed when it was supposed to be subscribed", lines.size() > 0);
-    }
-
-    @After
-    public void tearDown() {
-    }
-
-    private static void resetServerSecurity() {
-        //Reset JVM security to its original value
-        System.setProperty("Djava.security.properties", JVMSecurity);
     }
 
     private boolean isConnected() throws Exception {

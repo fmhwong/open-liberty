@@ -14,6 +14,12 @@ import static org.junit.Assert.assertNotNull;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.util.ArrayList;
+
+import org.junit.ClassRule;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.output.OutputFrame;
+import org.testcontainers.utility.MountableFile;
 
 import com.ibm.websphere.simplicity.log.Log;
 
@@ -45,6 +51,7 @@ public abstract class LogstashCollectorTest {
     public static final String KEY_STACKTRACE = "stackTrace";
     public static final String ENTRY = "Entry";
     public static final String EXIT = "Exit";
+    public static final String PATH_TO_AUTOFVT_TESTFILES = "lib/LibertyFATTestFiles/";
 
     protected abstract LibertyServer getServer();
 
@@ -142,6 +149,54 @@ public abstract class LogstashCollectorTest {
             APP_URL = "http://" + getServer().getHostname() + ":" + getServer().getHttpDefaultPort() + "/LogstashApp";
         }
         return APP_URL;
+    }
+
+    // Can be added to the FATSuite to make the resource lifecycle bound to the entire
+    // FAT bucket. Or, you can add this to any JUnit test class and the container will
+    // be started just before the @BeforeClass and stopped after the @AfterClass
+    @ClassRule
+    public static GenericContainer<?> logstashContainer = new GenericContainer<>("docker.elastic.co/logstash/logstash:7.2.0") //
+                    .withExposedPorts(5043) //
+                    .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.conf"), "/usr/share/logstash/pipeline/") //
+                    .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.yml"), "/usr/share/logstash/config/") //
+                    .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.key"), "/usr/share/logstash/config/") //
+                    .withCopyFileToContainer(MountableFile.forHostPath(PATH_TO_AUTOFVT_TESTFILES + "logstash.crt"), "/usr/share/logstash/config/") //
+                    .withLogConsumer(LogstashCollectorTest::log); //
+
+    private static ArrayList<String> logstashOutput = new ArrayList<String>();
+
+    // This helper method is passed into `withLogConsumer()` of the container
+    // It will consume all of the logs (System.out) of the container, which we will
+    // use to pipe container output to our standard FAT output logs (output.txt)
+    private static void log(OutputFrame frame) {
+        String msg = frame.getUtf8String();
+        if (msg.endsWith("\n"))
+            msg = msg.substring(0, msg.length() - 1);
+        logstashOutput.add(msg);
+        Log.info(c, "logstashContainer", msg);
+    }
+
+    protected static void clearOutput() {
+        logstashOutput.clear();
+    }
+
+    protected static String waitForStringInOutput(String str) {
+        Log.info(c, "waitForStringInOutput", "looking for " + str);
+        int timeout = 30 * 1000; // 30 seconds
+        while (timeout > 0) {
+            for (String line : logstashOutput) {
+                Log.info(c, "waitForStringInOutput", line);
+                if (line.contains(str)) {
+                    return line;
+                }
+            }
+            timeout -= 1000;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+            }
+        }
+        return null; // timed out and not found
     }
 
 }

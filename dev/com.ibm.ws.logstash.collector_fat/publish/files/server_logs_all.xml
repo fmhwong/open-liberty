@@ -31,9 +31,6 @@
         <source>trace</source>
     </logstashCollector>
 
-    <keyStore password="passw0rd" id="testKeyStore"
-        location="${server.output.dir}/resources/security/keystorelogstash.jks"></keyStore>
-
-    <ssl keyStoreRef="testKeyStore" id="testSSLConfig"></ssl>
+    <keyStore id="defaultKeyStore" password="{xor}Lz4sLChvLTs=" />
 
 </server>
