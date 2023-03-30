@@ -30,7 +30,8 @@ src: src, resources
   io.openliberty.microprofile.telemetry.internal.cdi.SPIMetaData,\
   io.openliberty.microprofile.telemetry.internal.rest.TelemetryClientAsyncTaskWrapper,\
   io.openliberty.microprofile.telemetry.internal.rest.TelemetryClientBuilderListener,\
-  io.openliberty.microprofile.telemetry.internal.rest.TelemetryServletContainerInitializer
+  io.openliberty.microprofile.telemetry.internal.rest.TelemetryServletContainerInitializer,\
+  io.openliberty.microprofile.telemetry.internal.ext.LogRecordContextExtension
 
 -dsannotations-inherit: true
 
@@ -60,7 +61,8 @@ Export-Package: \
 Private-Package: \
   io.openliberty.microprofile.telemetry.internal.cdi,\
   io.openliberty.microprofile.telemetry.internal.helper,\
-  io.openliberty.microprofile.telemetry.internal.resources
+  io.openliberty.microprofile.telemetry.internal.resources,\
+  io.openliberty.microprofile.telemetry.internal.ext
 
 -buildpath: \
     io.openliberty.jakarta.restfulWS.3.1;version=latest,\
@@ -71,6 +73,7 @@ Private-Package: \
     com.ibm.ws.org.osgi.annotation.versioning;version=latest, \
     com.ibm.ws.logging.core;version=latest,\
     com.ibm.ws.cdi.interfaces.jakarta;version=latest,\
+    com.ibm.websphere.org.osgi.service.component;version=latest,\
     com.ibm.wsspi.org.osgi.service.component.annotations;version=latest,\
     io.openliberty.io.opentelemetry.internal;version=latest,\
     io.openliberty.org.eclipse.microprofile.config.3.0,\
