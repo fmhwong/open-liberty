@@ -24,7 +24,8 @@ WS-TraceGroup: OPENTRACING
 
 -dsannotations: \
     io.openliberty.microprofile.opentracing.internal.OpenTracingFilterHelper, \
-    io.openliberty.microprofile.opentracing.internal.cdi.OpenTracingCDIInjectionExtension
+    io.openliberty.microprofile.opentracing.internal.cdi.OpenTracingCDIInjectionExtension, \
+    io.openliberty.microprofile.opentracing.internal.ext.LogRecordContextExtension
 
 
 Import-Package: \
@@ -38,6 +39,8 @@ Export-Package: \
     io.openliberty.microprofile.opentracing.internal;version=2.0,\
     io.openliberty.microprofile.opentracing.internal.cdi;version=2.0
 
+Private-Package: \
+    io.openliberty.microprofile.opentracing.internal.ext
 
 Include-Resource: \
   META-INF=resources/META-INF
