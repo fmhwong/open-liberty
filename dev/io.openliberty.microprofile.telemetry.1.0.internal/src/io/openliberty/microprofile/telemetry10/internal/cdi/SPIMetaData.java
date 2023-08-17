@@ -26,6 +26,7 @@ import io.openliberty.microprofile.telemetry.internal.common.AgentDetection;
 import io.openliberty.microprofile.telemetry.internal.common.cdi.OpenTelemetryProducer;
 import io.openliberty.microprofile.telemetry10.internal.rest.TelemetryClientFilter;
 import io.openliberty.microprofile.telemetry10.internal.rest.TelemetryContainerFilter;
+import io.openliberty.microprofile.telemetry10.internal.rest.TelemetryServletFilter;
 
 @Component(service = CDIExtensionMetadata.class, configurationPolicy = IGNORE)
 public class SPIMetaData implements CDIExtensionMetadata, CDIExtensionMetadataInternal {
@@ -41,6 +42,7 @@ public class SPIMetaData implements CDIExtensionMetadata, CDIExtensionMetadataIn
         }
         beans.add(TelemetryClientFilter.class);
         beans.add(TelemetryContainerFilter.class);
+        beans.add(TelemetryServletFilter.class);
         return beans;
     }
 
