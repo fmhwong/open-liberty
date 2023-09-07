@@ -32,6 +32,11 @@ public class TelemetryServletRequestListener implements ServletRequestListener {
             scope.close();
             sre.getServletRequest().removeAttribute(TelemetryContainerFilter.SPAN_SCOPE);
         }
+        scope = (Scope) sre.getServletRequest().getAttribute(TelemetryServletFilter.SPAN_SCOPE);
+        if (scope != null) {
+            scope.close();
+            sre.getServletRequest().removeAttribute(TelemetryServletFilter.SPAN_SCOPE);
+        }
     }
 
 }

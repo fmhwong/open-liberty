@@ -31,6 +31,7 @@ import io.openliberty.microprofile.telemetry.internal.cdi.OpenTelemetryInfo;
 import io.openliberty.microprofile.telemetry.internal.helper.AgentDetection;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.TextMapGetter;
@@ -83,23 +84,22 @@ public class TelemetryServletFilter implements Filter {
     private static final String ENV_LOGS_EXPORTER_PROPERTY = "OTEL_LOGS_EXPORTER";
     private static final String ENV_DISABLE_PROPERTY = "OTEL_SDK_DISABLED";
     private static final String CONFIG_DISABLE_PROPERTY = "otel.sdk.disabled";
+    private static final String ENV_DISABLE_HTTP_TRACING_PROPERTY = "OTEL_TRACE_HTTP_DISABLED";
+    private static final String CONFIG_DISABLE_HTTP_TRACING_PROPERTY = "otel.trace.http.disabled";
     private static final String SERVICE_NAME_PROPERTY = "otel.service.name";
 
     private final Config config = ConfigProvider.getConfig();
 
     public TelemetryServletFilter() {
-        System.out.println("FW TelemetryServletFilter ctor default");
     }
 
     @Override
     public void init(FilterConfig config) {
         if (instrumenter == null) {
-//            OpenTelemetryInfo otelInfo = CDI.current().select(OpenTelemetryInfo.class).get();
             OpenTelemetryInfo otelInfo = getOpenTelemetryInfo();
-            System.out.println("FW TelemetryServletFilter init instance=" + System.identityHashCode(this));
-            System.out.println("FW TelemetryServletFilter init otelInfo=" + otelInfo);
-            System.out.println("FW TelemetryServletFilter init otelInfo.getEnabled()=" + otelInfo.getEnabled());
-
+            if (tc.isDebugEnabled()) {
+                Tr.debug(tc, "otelInfo.getEnabled()=" + otelInfo.getEnabled());
+            }
             if (otelInfo != null && otelInfo.getEnabled() && !AgentDetection.isAgentActive()) {
                 InstrumenterBuilder<ServletRequest, ServletResponse> builder = Instrumenter.builder(
                                                                                                     otelInfo.getOpenTelemetry(),
@@ -110,12 +110,15 @@ public class TelemetryServletFilter implements Filter {
                                 .setSpanStatusExtractor(HttpSpanStatusExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER))
                                 .addAttributesExtractor(HttpServerAttributesExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER))
                                 .addAttributesExtractor(NetServerAttributesExtractor.create(NET_SERVER_ATTRIBUTES_GETTER))
-                                .buildServerInstrumenter(new ContainerRequestContextTextMapGetter());
-                System.out.println("FW TelemetryServletFilter init instrumenter is set");
-
+                                .buildServerInstrumenter(new ServletRequestContextTextMapGetter());
+                if (tc.isDebugEnabled()) {
+                    Tr.debug(tc, "instrumenter is initialized");
+                }
             } else {
                 instrumenter = null;
-                System.out.println("FW TelemetryServletFilter init instrumenter is NULL");
+                if (tc.isDebugEnabled()) {
+                    Tr.debug(tc, "instrumenter is set to null");
+                }
             }
 
         }
@@ -124,32 +127,27 @@ public class TelemetryServletFilter implements Filter {
     /** {@inheritDoc} */
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
-        System.out.println("FW TelemetryServletFilter doFilter instance=" + System.identityHashCode(this));
-
-        System.out.println("FW isAsyncStarted=" + request.isAsyncStarted());
-
-        System.out.println("FW instrumenter=" + instrumenter);
-
         Scope scope = null;
-
         if (instrumenter != null) {
             Context parentContext = Context.current();
             if (instrumenter.shouldStart(parentContext, request)) {
-                System.out.println("FW TelemetryServletFilter doFilter start span");
                 Context spanContext = instrumenter.start(parentContext, request);
                 scope = spanContext.makeCurrent();
                 request.setAttribute(SPAN_CONTEXT, spanContext);
                 request.setAttribute(SPAN_PARENT_CONTEXT, parentContext);
                 request.setAttribute(SPAN_SCOPE, scope);
+
+                if (tc.isDebugEnabled()) {
+                    Tr.debug(tc, "Span traceId=" + Span.current().getSpanContext().getTraceId() + ", spanId=" + Span.current().getSpanContext().getSpanId());
+                }
             }
         }
-        System.out.println("FW TelemetryServletFilter doFilter before filter");
 
         chain.doFilter(request, response);
 
-        System.out.println("FW TelemetryServletFilter doFilter after filter");
-
-        System.out.println("FW isAsyncStarted=" + request.isAsyncStarted());
+        if (tc.isDebugEnabled()) {
+            Tr.debug(tc, "isAsyncStarted=" + request.isAsyncStarted());
+        }
 
         if (request.isAsyncStarted()) {
 
@@ -180,7 +178,9 @@ public class TelemetryServletFilter implements Filter {
 
         if (scope != null) {
             scope.close();
+            request.removeAttribute(SPAN_SCOPE);
         }
+
     }
 
     private void endSpan(ServletRequest request, ServletResponse response, Throwable throwable) {
@@ -191,7 +191,10 @@ public class TelemetryServletFilter implements Filter {
             }
 
             try {
-                System.out.println("FW TelemetryServletFilter doFilter end span");
+                if (tc.isDebugEnabled()) {
+                    Tr.debug(tc, "End span traceId=" + Span.fromContext(spanContext).getSpanContext().getTraceId() + " spanId="
+                                 + Span.fromContext(spanContext).getSpanContext().getSpanId());
+                }
                 instrumenter.end(spanContext, request, response, throwable);
             } finally {
                 request.removeAttribute(SPAN_CONTEXT);
@@ -200,29 +203,25 @@ public class TelemetryServletFilter implements Filter {
         }
     }
 
-    private static class ContainerRequestContextTextMapGetter implements TextMapGetter<ServletRequest> {
+    private static class ServletRequestContextTextMapGetter implements TextMapGetter<ServletRequest> {
 
         @Override
         public Iterable<String> keys(final ServletRequest request) {
             if (request instanceof HttpServletRequest) {
                 HttpServletRequest httpServletRequest = (HttpServletRequest) request;
-                System.out.println("FW ContainerRequestContextTextMapGetter keys=" + httpServletRequest.getHeaderNames());
                 return new HashSet<String>(Collections.list(httpServletRequest.getHeaderNames()));
             }
-            System.out.println("FW ContainerRequestContextTextMapGetter keys=EMPTY");
             return Collections.emptyList();
         }
 
         @Override
         public String get(final ServletRequest request, final String key) {
             if (request == null) {
-                System.out.println("FW ContainerRequestContextTextMapGetter get key=" + key + " value=NULL");
                 return null;
             }
 
             if (request instanceof HttpServletRequest) {
                 HttpServletRequest httpServletRequest = (HttpServletRequest) request;
-                System.out.println("FW ContainerRequestContextTextMapGetter get key=" + key + " value=" + httpServletRequest.getHeader(key));
                 return httpServletRequest.getHeader(key);
             }
             return null;
@@ -259,7 +258,7 @@ public class TelemetryServletFilter implements Filter {
         public String route(final ServletRequest request) {
             if (request instanceof HttpServletRequest) {
                 HttpServletRequest httpServletRequest = (HttpServletRequest) request;
-                return "FW:" + httpServletRequest.getRequestURI();
+                return httpServletRequest.getRequestURI();
             }
             return null;
         }
@@ -359,9 +358,9 @@ public class TelemetryServletFilter implements Filter {
     private HashMap<String, String> getTelemetryProperties() {
         HashMap<String, String> telemetryProperties = new HashMap<>();
         for (String propertyName : config.getPropertyNames()) {
+
             if (propertyName.startsWith("otel.")) {
-                config.getOptionalValue(propertyName, String.class).ifPresent(
-                                                                              value -> telemetryProperties.put(propertyName, value));
+                config.getOptionalValue(propertyName, String.class).ifPresent(value -> telemetryProperties.put(propertyName, value));
             }
         }
         //Metrics and logs are disabled by default
@@ -375,9 +374,17 @@ public class TelemetryServletFilter implements Filter {
     private boolean checkDisabled(Map<String, String> oTelConfigs) {
         //In order to enable any of the tracing aspects, the configuration otel.sdk.disabled=false must be specified in any of the configuration sources available via MicroProfile Config.
         if (oTelConfigs.get(ENV_DISABLE_PROPERTY) != null) {
-            return Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_PROPERTY));
+            if (oTelConfigs.get(ENV_DISABLE_HTTP_TRACING_PROPERTY) != null) {
+                return Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_PROPERTY)) || Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_HTTP_TRACING_PROPERTY));
+            } else {
+                return Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_PROPERTY));
+            }
         } else if (oTelConfigs.get(CONFIG_DISABLE_PROPERTY) != null) {
-            return Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_PROPERTY));
+            if (oTelConfigs.get(CONFIG_DISABLE_HTTP_TRACING_PROPERTY) != null) {
+                return Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_PROPERTY)) || Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_HTTP_TRACING_PROPERTY));
+            } else {
+                return Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_PROPERTY));
+            }
         }
         return true;
     }
