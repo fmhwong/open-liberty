@@ -41,11 +41,6 @@ public class TelemetryServletRequestListener implements ServletRequestListener {
         } catch (Exception e) {
            Tr.error(tc, Tr.formatMessage(tc, "CWMOT5002.telemetry.error", e));
            return;
-        }
-        scope = (Scope) sre.getServletRequest().getAttribute(TelemetryServletFilter.SPAN_SCOPE);
-        if (scope != null) {
-            scope.close();
-            sre.getServletRequest().removeAttribute(TelemetryServletFilter.SPAN_SCOPE);
-        }
+        } 
     }
 }
