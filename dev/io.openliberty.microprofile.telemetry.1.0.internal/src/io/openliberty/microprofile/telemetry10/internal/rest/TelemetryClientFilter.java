@@ -49,48 +49,58 @@ public class TelemetryClientFilter extends AbstractTelemetryClientFilter impleme
 
     private static final TraceComponent tc = Tr.register(TelemetryClientFilter.class);
 
-    private final Instrumenter<ClientRequestContext, ClientResponseContext> instrumenter;
+    private Instrumenter<ClientRequestContext, ClientResponseContext> instrumenter;
 
     private final String configString = "otel.span.client.";
 
     private static final NetClientAttributesGetterImpl NET_CLIENT_ATTRIBUTES_GETTER = new NetClientAttributesGetterImpl();
     private static final HttpClientAttributesGetterImpl HTTP_CLIENT_ATTRIBUTES_GETTER = new HttpClientAttributesGetterImpl();
 
-    TelemetryClientFilter() {
-        OpenTelemetryInfo openTelemetryInfo = OpenTelemetryAccessor.getOpenTelemetryInfo();
-        Instrumenter<ClientRequestContext, ClientResponseContext> instrumenter = null;
-        try {
-            if (openTelemetryInfo.getEnabled() && !AgentDetection.isAgentActive()) {
-                InstrumenterBuilder<ClientRequestContext, ClientResponseContext> builder = Instrumenter.builder(openTelemetryInfo.getOpenTelemetry(),
-                                                                                                                "Client filter",
-                                                                                                                HttpSpanNameExtractor.create(HTTP_CLIENT_ATTRIBUTES_GETTER));
-
-                instrumenter = builder
-                                .setSpanStatusExtractor(HttpSpanStatusExtractor.create(HTTP_CLIENT_ATTRIBUTES_GETTER))
-                                .addAttributesExtractor(HttpClientAttributesExtractor.create(HTTP_CLIENT_ATTRIBUTES_GETTER))
-                                .addAttributesExtractor(NetClientAttributesExtractor.create(NET_CLIENT_ATTRIBUTES_GETTER))
-                                .buildClientInstrumenter(new ClientRequestContextTextMapSetter());
-            } else {
-                instrumenter = null;
-            }
-        } catch (Exception e) {
-            instrumenter = null;
-            Tr.error(tc, Tr.formatMessage(tc, "CWMOT5002.telemetry.error", e));
-        } finally {
-            this.instrumenter = instrumenter;
+    public Instrumenter<ClientRequestContext, ClientResponseContext> getInstrumenter() {
+        if (instrumenter != null) {
+            return instrumenter;
         }
+
+        synchronized (this) {
+            if (instrumenter != null) {
+                return instrumenter;
+            }
+            OpenTelemetryInfo openTelemetryInfo = OpenTelemetryAccessor.getOpenTelemetryInfo();
+            Instrumenter<ClientRequestContext, ClientResponseContext> instrumenter = null;
+            try {
+                if (openTelemetryInfo.getEnabled() && !AgentDetection.isAgentActive()) {
+                    InstrumenterBuilder<ClientRequestContext, ClientResponseContext> builder = Instrumenter.builder(openTelemetryInfo.getOpenTelemetry(),
+                                                                                                                    "Client filter",
+                                                                                                                    HttpSpanNameExtractor.create(HTTP_CLIENT_ATTRIBUTES_GETTER));
+
+                    instrumenter = builder
+                                    .setSpanStatusExtractor(HttpSpanStatusExtractor.create(HTTP_CLIENT_ATTRIBUTES_GETTER))
+                                    .addAttributesExtractor(HttpClientAttributesExtractor.create(HTTP_CLIENT_ATTRIBUTES_GETTER))
+                                    .addAttributesExtractor(NetClientAttributesExtractor.create(NET_CLIENT_ATTRIBUTES_GETTER))
+                                    .buildClientInstrumenter(new ClientRequestContextTextMapSetter());
+                } else {
+                    instrumenter = null;
+                }
+            } catch (Exception e) {
+                instrumenter = null;
+                Tr.error(tc, Tr.formatMessage(tc, "CWMOT5002.telemetry.error", e));
+            } finally {
+                instrumenter = instrumenter;
+            }
+        }
+        return instrumenter;
     }
 
     @Override
     public void filter(final ClientRequestContext request) {
-        if (instrumenter != null) {
+        if (getInstrumenter() != null) {
             AccessController.doPrivileged(new PrivilegedAction<Void>() {
                 @Override
                 public Void run() {
                     try {
                         Context parentContext = Context.current();
-                        if (instrumenter.shouldStart(parentContext, request)) {
-                            Context spanContext = instrumenter.start(parentContext, request);
+                        if (getInstrumenter().shouldStart(parentContext, request)) {
+                            Context spanContext = getInstrumenter().start(parentContext, request);
                             request.setProperty(configString + "context", spanContext);
                             request.setProperty(configString + "parentContext", parentContext);
                         }
@@ -105,7 +115,7 @@ public class TelemetryClientFilter extends AbstractTelemetryClientFilter impleme
 
     @Override
     public void filter(final ClientRequestContext request, final ClientResponseContext response) {
-        if (instrumenter != null) {
+        if (getInstrumenter() != null) {
             AccessController.doPrivileged(new PrivilegedAction<Void>() {
                 @Override
                 public Void run() {
@@ -115,7 +125,7 @@ public class TelemetryClientFilter extends AbstractTelemetryClientFilter impleme
                             return null;
                         }
                         try {
-                            instrumenter.end(spanContext, request, response, null);
+                            getInstrumenter().end(spanContext, request, response, null);
                         } finally {
                             request.removeProperty(configString + "context");
                             request.removeProperty(configString + "parentContext");
@@ -135,7 +145,7 @@ public class TelemetryClientFilter extends AbstractTelemetryClientFilter impleme
      */
     @Override
     public boolean isEnabled() {
-        return instrumenter != null;
+        return getInstrumenter() != null;
     }
 
     private static class ClientRequestContextTextMapSetter implements TextMapSetter<ClientRequestContext> {

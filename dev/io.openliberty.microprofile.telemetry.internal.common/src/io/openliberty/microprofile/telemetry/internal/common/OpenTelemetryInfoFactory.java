@@ -19,7 +19,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,9 +32,7 @@ import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
-import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Reference;
 
 import com.ibm.websphere.csi.J2EEName;
 import com.ibm.websphere.ras.Tr;
@@ -129,14 +126,7 @@ public class OpenTelemetryInfoFactory implements ApplicationStateListener {
 			return new OpenTelemetryInfo(false, OpenTelemetry.noop());
 		}
 
-		try {
-			
-			//This contains API calls that change between the upstream open telemetry version.
-			//We use @Reference because the callers coming into  OpenTelemetryInfoFactory via
-			//The static accessor do not know which version of mpTelemetry will be in use.
-			BundleContext bc = getBundleContext(OpenTelemetryInfoFactory.class);
-			OpenTelemetrySdkBuilderSupplier supplier = getService(bc, OpenTelemetrySdkBuilderSupplier.class);		
-			
+		try {			
 			if (AgentDetection.isAgentActive()) {
 				// If we're using the agent, it will have set GlobalOpenTelemetry and we must use its instance
 				// all config is handled by the agent in this case
@@ -148,6 +138,11 @@ public class OpenTelemetryInfoFactory implements ApplicationStateListener {
 			//Builds tracer provider if user has enabled tracing aspects with config properties
 			if (!checkDisabled(telemetryProperties)) {
 				OpenTelemetry openTelemetry = AccessController.doPrivileged( (PrivilegedAction<OpenTelemetry>) () -> {
+					//This contains API calls that change between the upstream open telemetry version.
+					//We use @Reference because the callers coming into  OpenTelemetryInfoFactory via
+					//The static accessor do not know which version of mpTelemetry will be in use.
+					BundleContext bc = getBundleContext(OpenTelemetryInfoFactory.class);
+					OpenTelemetrySdkBuilderSupplier supplier = getService(bc, OpenTelemetrySdkBuilderSupplier.class);	
 					
 					return supplier
 						.getPartiallyConfiguredOpenTelemetrySDKBuilder()
@@ -326,9 +321,9 @@ public class OpenTelemetryInfoFactory implements ApplicationStateListener {
      * @throws InvalidFrameworkStateException if the server OSGi framework is being shutdown
      * @throws ServiceNotFoundException if an instance of the requested service can not be found
      */
-    private static <T> T getService(BundleContext bundleContext, Class<T> serviceClass) throws Exception {
+    private static <T> T getService(BundleContext bundleContext, Class<T> serviceClass) throws BundleLoadingException {
         if (!FrameworkState.isValid()) {
-            throw new Exception("Invalid OSGi Framework State");
+            throw new BundleLoadingException("Invalid OSGi Framework State");
         }
 
         ServiceReference<T> ref = bundleContext.getServiceReference(serviceClass);
@@ -341,12 +336,21 @@ public class OpenTelemetryInfoFactory implements ApplicationStateListener {
         if (service == null) {
             //One last check to make sure the framework didn't start to shutdown after we last looked
             if (!FrameworkState.isValid()) {
-                throw new Exception("Invalid OSGi Framework State");
+                throw new BundleLoadingException("Invalid OSGi Framework State");
             } else {
-                throw new Exception("Service not Found");
+                throw new BundleLoadingException("Service not Found");
             }
         }
         return service;
+    }
+    
+    //RuntimeException so we can pass it out a doPriv.
+    private static class BundleLoadingException extends RuntimeException {
+
+		public BundleLoadingException(String string) {
+			super(string);
+		}
+    	
     }
 
 }

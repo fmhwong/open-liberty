@@ -26,6 +26,7 @@ import io.openliberty.microprofile.telemetry.internal.common.AgentDetection;
 import io.openliberty.microprofile.telemetry.internal.common.OpenTelemetryInfo;
 import io.openliberty.microprofile.telemetry.internal.common.rest.AbstractTelemetryContainerFilter;
 import io.openliberty.microprofile.telemetry.internal.common.rest.RestRouteCache;
+import io.openliberty.microprofile.telemetry.internal.interfaces.OpenTelemetryAccessor;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.TextMapGetter;
@@ -39,7 +40,6 @@ import io.opentelemetry.instrumentation.api.instrumenter.net.NetServerAttributes
 import io.opentelemetry.instrumentation.api.instrumenter.net.NetServerAttributesGetter;
 import io.opentelemetry.semconv.trace.attributes.SemanticAttributes;
 import jakarta.annotation.Nullable;
-import jakarta.inject.Inject;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
@@ -67,52 +67,61 @@ public class TelemetryContainerFilter extends AbstractTelemetryContainerFilter i
 
     private static final RestRouteCache ROUTE_CACHE = new RestRouteCache();
 
-    private Instrumenter<ContainerRequestContext, ContainerResponseContext> instrumenter;
+    private volatile Instrumenter<ContainerRequestContext, ContainerResponseContext> instrumenter;
 
     @jakarta.ws.rs.core.Context
     private ResourceInfo resourceInfo;
 
-    // RESTEasy requires no-arg constructor for CDI injection: https://issues.redhat.com/browse/RESTEASY-1538
-    public TelemetryContainerFilter() {
-    }
+    public Instrumenter<ContainerRequestContext, ContainerResponseContext> getInstrumenter() {
+        if (instrumenter != null) {
+            return instrumenter;
+        }
 
-    @Inject
-    public TelemetryContainerFilter(final OpenTelemetryInfo openTelemetry) {
-        try {
-            if (openTelemetry.getEnabled() && !AgentDetection.isAgentActive()) {
-                InstrumenterBuilder<ContainerRequestContext, ContainerResponseContext> builder = Instrumenter.builder(
-                                                                                                                      openTelemetry.getOpenTelemetry(),
-                                                                                                                      INSTRUMENTATION_NAME,
-                                                                                                                      HttpSpanNameExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER));
+        synchronized (this) {
+            if (instrumenter != null) {
+                return instrumenter;
+            }
 
-                this.instrumenter = builder
-                                .setSpanStatusExtractor(HttpSpanStatusExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER))
-                                .addAttributesExtractor(HttpServerAttributesExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER))
-                                .addAttributesExtractor(NetServerAttributesExtractor.create(NET_SERVER_ATTRIBUTES_GETTER))
-                                .buildServerInstrumenter(new ContainerRequestContextTextMapGetter());
+            try {
+                OpenTelemetryInfo openTelemetry = OpenTelemetryAccessor.getOpenTelemetryInfo();
+                if (openTelemetry.getEnabled() && !AgentDetection.isAgentActive()) {
+                    InstrumenterBuilder<ContainerRequestContext, ContainerResponseContext> builder = Instrumenter.builder(
+                                                                                                                          openTelemetry.getOpenTelemetry(),
+                                                                                                                          INSTRUMENTATION_NAME,
+                                                                                                                          HttpSpanNameExtractor
+                                                                                                                                          .create(HTTP_SERVER_ATTRIBUTES_GETTER));
 
-            } else {
+                    instrumenter = builder
+                                    .setSpanStatusExtractor(HttpSpanStatusExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER))
+                                    .addAttributesExtractor(HttpServerAttributesExtractor.create(HTTP_SERVER_ATTRIBUTES_GETTER))
+                                    .addAttributesExtractor(NetServerAttributesExtractor.create(NET_SERVER_ATTRIBUTES_GETTER))
+                                    .buildServerInstrumenter(new ContainerRequestContextTextMapGetter());
+
+                } else {
+                    instrumenter = null;
+                }
+            } catch (Exception e) {
+                Tr.error(tc, Tr.formatMessage(tc, "CWMOT5002.telemetry.error", e));
                 this.instrumenter = null;
             }
-        } catch (Exception e) {
-            Tr.error(tc, Tr.formatMessage(tc, "CWMOT5002.telemetry.error", e));
-            this.instrumenter = null;
         }
+
+        return instrumenter;
     }
 
     @Override
     public void filter(final ContainerRequestContext request) {
-        if (instrumenter == null) {
+        if (getInstrumenter() == null) {
             return;
         }
 
         try {
             Context parentContext = Context.current();
-            if (instrumenter.shouldStart(parentContext, request)) {
+            if (getInstrumenter().shouldStart(parentContext, request)) {
                 request.setProperty(REST_RESOURCE_CLASS, resourceInfo.getResourceClass());
                 request.setProperty(REST_RESOURCE_METHOD, resourceInfo.getResourceMethod());
 
-                Context spanContext = instrumenter.start(parentContext, request);
+                Context spanContext = getInstrumenter().start(parentContext, request);
                 Scope scope = spanContext.makeCurrent();
                 request.setProperty(SPAN_CONTEXT, spanContext);
                 request.setProperty(SPAN_PARENT_CONTEXT, parentContext);
@@ -129,7 +138,7 @@ public class TelemetryContainerFilter extends AbstractTelemetryContainerFilter i
         // Scope is ended in TelemetryServletRequestListener to ensure it does run on the original request thread
 
         try {
-            if (instrumenter == null) {
+            if (getInstrumenter() == null) {
                 return;
             }
 
@@ -138,7 +147,7 @@ public class TelemetryContainerFilter extends AbstractTelemetryContainerFilter i
                 return;
             }
             try {
-                instrumenter.end(spanContext, request, response, null);
+                getInstrumenter().end(spanContext, request, response, null);
             } finally {
                 request.removeProperty(REST_RESOURCE_CLASS);
                 request.removeProperty(REST_RESOURCE_METHOD);
