@@ -25,6 +25,7 @@ import com.ibm.ws.cdi.extension.CDIExtensionMetadataInternal;
 import io.openliberty.cdi.spi.CDIExtensionMetadata;
 import io.openliberty.microprofile.telemetry.internal.common.AgentDetection;
 import io.openliberty.microprofile.telemetry.internal.common.cdi.OpenTelemetryProducer;
+import io.openliberty.microprofile.telemetry.internal.common.rest.TelemetryServletFilter;
 import io.openliberty.microprofile.telemetry11.internal.rest.TelemetryClientFilter;
 import io.openliberty.microprofile.telemetry11.internal.rest.TelemetryContainerFilter;
 
@@ -42,6 +43,7 @@ public class SPIMetaData implements CDIExtensionMetadata, CDIExtensionMetadataIn
         }
         beans.add(TelemetryClientFilter.class);
         beans.add(TelemetryContainerFilter.class);
+        beans.add(TelemetryServletFilter.class);
         return beans;
     }
 

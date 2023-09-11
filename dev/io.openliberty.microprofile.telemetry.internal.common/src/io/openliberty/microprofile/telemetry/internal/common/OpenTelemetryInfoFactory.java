@@ -347,6 +347,8 @@ public class OpenTelemetryInfoFactory implements ApplicationStateListener {
     //RuntimeException so we can pass it out a doPriv.
     private static class BundleLoadingException extends RuntimeException {
 
+		private static final long serialVersionUID = 1L;
+
 		public BundleLoadingException(String string) {
 			super(string);
 		}

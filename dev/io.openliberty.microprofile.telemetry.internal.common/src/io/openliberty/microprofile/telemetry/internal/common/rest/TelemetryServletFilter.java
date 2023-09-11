@@ -7,7 +7,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
-package io.openliberty.microprofile.telemetry.internal.rest;
+package io.openliberty.microprofile.telemetry.internal.common.rest;
 
 import java.io.IOException;
 import java.security.AccessController;
@@ -27,8 +27,9 @@ import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.ws.runtime.metadata.ComponentMetaData;
 import com.ibm.ws.threadContext.ComponentMetaDataAccessorImpl;
 
-import io.openliberty.microprofile.telemetry.internal.cdi.OpenTelemetryInfo;
-import io.openliberty.microprofile.telemetry.internal.helper.AgentDetection;
+import io.openliberty.microprofile.telemetry.internal.common.AgentDetection;
+import io.openliberty.microprofile.telemetry.internal.common.OpenTelemetryInfo;
+import io.openliberty.microprofile.telemetry.internal.interfaces.OpenTelemetryAccessor;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -96,7 +97,7 @@ public class TelemetryServletFilter implements Filter {
     @Override
     public void init(FilterConfig config) {
         if (instrumenter == null) {
-            OpenTelemetryInfo otelInfo = getOpenTelemetryInfo();
+            OpenTelemetryInfo otelInfo = OpenTelemetryAccessor.getOpenTelemetryInfo();
             if (tc.isDebugEnabled()) {
                 Tr.debug(tc, "otelInfo.getEnabled()=" + otelInfo.getEnabled());
             }
@@ -317,42 +318,6 @@ public class TelemetryServletFilter implements Filter {
             }
             return Collections.emptyList();
         }
-    }
-
-    private OpenTelemetryInfo getOpenTelemetryInfo() {
-        if (AgentDetection.isAgentActive()) {
-            // If we're using the agent, it will have set GlobalOpenTelemetry and we must use its instance
-            // all config is handled by the agent in this case
-            return new OpenTelemetryInfo(true, GlobalOpenTelemetry.get());
-        }
-
-        HashMap<String, String> telemetryProperties = getTelemetryProperties();
-
-        //Builds tracer provider if user has enabled tracing aspects with config properties
-        if (!checkDisabled(telemetryProperties)) {
-            OpenTelemetry openTelemetry = AccessController.doPrivileged((PrivilegedAction<OpenTelemetry>) () -> {
-                return AutoConfiguredOpenTelemetrySdk.builder()
-                                .addPropertiesCustomizer(x -> telemetryProperties) //Overrides OpenTelemetry's property order
-                                .addResourceCustomizer(this::customizeResource)//Defaults service name to application name
-                                .setServiceClassLoader(Thread.currentThread().getContextClassLoader())
-                                .setResultAsGlobal(false)
-                                .registerShutdownHook(false)
-                                .build()
-                                .getOpenTelemetrySdk();
-            });
-
-            if (openTelemetry != null) {
-                return new OpenTelemetryInfo(true, openTelemetry);
-            }
-        }
-        //By default, MicroProfile Telemetry tracing is off.
-        //The absence of an installed SDK is a “no-op” API
-        //Operations on a Tracer, or on Spans have no side effects and do nothing
-        ComponentMetaData cData = ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData();
-        String applicationName = cData.getJ2EEName().getApplication();
-        Tr.info(tc, "CWMOT5100.tracing.is.disabled", applicationName);
-
-        return new OpenTelemetryInfo(false, OpenTelemetry.noop());
     }
 
     private HashMap<String, String> getTelemetryProperties() {
