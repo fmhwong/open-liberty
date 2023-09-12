@@ -10,8 +10,6 @@
 package io.openliberty.microprofile.telemetry.internal.common.rest;
 
 import java.io.IOException;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,14 +22,10 @@ import org.eclipse.microprofile.config.ConfigProvider;
 
 import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
-import com.ibm.ws.runtime.metadata.ComponentMetaData;
-import com.ibm.ws.threadContext.ComponentMetaDataAccessorImpl;
 
 import io.openliberty.microprofile.telemetry.internal.common.AgentDetection;
 import io.openliberty.microprofile.telemetry.internal.common.OpenTelemetryInfo;
 import io.openliberty.microprofile.telemetry.internal.interfaces.OpenTelemetryAccessor;
-import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
@@ -44,11 +38,6 @@ import io.opentelemetry.instrumentation.api.instrumenter.http.HttpSpanNameExtrac
 import io.opentelemetry.instrumentation.api.instrumenter.http.HttpSpanStatusExtractor;
 import io.opentelemetry.instrumentation.api.instrumenter.net.NetServerAttributesExtractor;
 import io.opentelemetry.instrumentation.api.instrumenter.net.NetServerAttributesGetter;
-import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
-import io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties;
-import io.opentelemetry.sdk.resources.Resource;
-import io.opentelemetry.sdk.resources.ResourceBuilder;
-import io.opentelemetry.semconv.resource.attributes.ResourceAttributes;
 import io.opentelemetry.semconv.trace.attributes.SemanticAttributes;
 import jakarta.annotation.Nullable;
 import jakarta.servlet.AsyncContext;
@@ -79,15 +68,8 @@ public class TelemetryServletFilter implements Filter {
 
     private Instrumenter<ServletRequest, ServletResponse> instrumenter;
 
-    private static final String CONFIG_METRICS_EXPORTER_PROPERTY = "otel.metrics.exporter";
-    private static final String CONFIG_LOGS_EXPORTER_PROPERTY = "otel.logs.exporter";
-    private static final String ENV_METRICS_EXPORTER_PROPERTY = "OTEL_METRICS_EXPORTER";
-    private static final String ENV_LOGS_EXPORTER_PROPERTY = "OTEL_LOGS_EXPORTER";
-    private static final String ENV_DISABLE_PROPERTY = "OTEL_SDK_DISABLED";
-    private static final String CONFIG_DISABLE_PROPERTY = "otel.sdk.disabled";
     private static final String ENV_DISABLE_HTTP_TRACING_PROPERTY = "OTEL_TRACE_HTTP_DISABLED";
     private static final String CONFIG_DISABLE_HTTP_TRACING_PROPERTY = "otel.trace.http.disabled";
-    private static final String SERVICE_NAME_PROPERTY = "otel.service.name";
 
     private final Config config = ConfigProvider.getConfig();
 
@@ -101,7 +83,10 @@ public class TelemetryServletFilter implements Filter {
             if (tc.isDebugEnabled()) {
                 Tr.debug(tc, "otelInfo.getEnabled()=" + otelInfo.getEnabled());
             }
-            if (otelInfo != null && otelInfo.getEnabled() && !AgentDetection.isAgentActive()) {
+            if (otelInfo != null && 
+                    otelInfo.getEnabled() && 
+                    !AgentDetection.isAgentActive() &&
+                    checkDisabled(getTelemetryProperties())) {
                 InstrumenterBuilder<ServletRequest, ServletResponse> builder = Instrumenter.builder(
                                                                                                     otelInfo.getOpenTelemetry(),
                                                                                                     INSTRUMENTATION_NAME,
@@ -328,49 +313,23 @@ public class TelemetryServletFilter implements Filter {
                 config.getOptionalValue(propertyName, String.class).ifPresent(value -> telemetryProperties.put(propertyName, value));
             }
         }
-        //Metrics and logs are disabled by default
-        telemetryProperties.put(CONFIG_METRICS_EXPORTER_PROPERTY, "none");
-        telemetryProperties.put(CONFIG_LOGS_EXPORTER_PROPERTY, "none");
-        telemetryProperties.put(ENV_METRICS_EXPORTER_PROPERTY, "none");
-        telemetryProperties.put(ENV_LOGS_EXPORTER_PROPERTY, "none");
         return telemetryProperties;
     }
 
+    /**
+     * Check if the HTTP tracing should be disabled
+     * @param oTelConfigs
+     * @return false (default)
+     * @return true if either ENV_DISABLE_HTTP_TRACING_PROPERTY or CONFIG_DISABLE_HTTP_TRACING_PROPERTY equal true
+     */
     private boolean checkDisabled(Map<String, String> oTelConfigs) {
         //In order to enable any of the tracing aspects, the configuration otel.sdk.disabled=false must be specified in any of the configuration sources available via MicroProfile Config.
-        if (oTelConfigs.get(ENV_DISABLE_PROPERTY) != null) {
-            if (oTelConfigs.get(ENV_DISABLE_HTTP_TRACING_PROPERTY) != null) {
-                return Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_PROPERTY)) || Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_HTTP_TRACING_PROPERTY));
-            } else {
-                return Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_PROPERTY));
-            }
-        } else if (oTelConfigs.get(CONFIG_DISABLE_PROPERTY) != null) {
-            if (oTelConfigs.get(CONFIG_DISABLE_HTTP_TRACING_PROPERTY) != null) {
-                return Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_PROPERTY)) || Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_HTTP_TRACING_PROPERTY));
-            } else {
-                return Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_PROPERTY));
-            }
+        if (oTelConfigs.get(ENV_DISABLE_HTTP_TRACING_PROPERTY) != null) {
+            return Boolean.valueOf(oTelConfigs.get(ENV_DISABLE_HTTP_TRACING_PROPERTY));
+        } else if (oTelConfigs.get(CONFIG_DISABLE_HTTP_TRACING_PROPERTY) != null) {
+            return Boolean.valueOf(oTelConfigs.get(CONFIG_DISABLE_HTTP_TRACING_PROPERTY));
         }
-        return true;
+        return false;
     }
 
-    //Adds the service name to the resource attributes
-    private Resource customizeResource(Resource resource, ConfigProperties c) {
-        ResourceBuilder builder = resource.toBuilder();
-        builder.put(ResourceAttributes.SERVICE_NAME, getServiceName(c));
-        return builder.build();
-    }
-
-    //Uses application name if the user has not given configured service.name resource attribute
-    private String getServiceName(ConfigProperties c) {
-        String appName = c.getString(SERVICE_NAME_PROPERTY);
-        ComponentMetaData cmd = ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData();
-        if (appName == null) {
-            if (cmd != null) {
-                appName = cmd.getModuleMetaData().getApplicationMetaData().getName();
-            }
-        }
-
-        return appName;
-    }
 }

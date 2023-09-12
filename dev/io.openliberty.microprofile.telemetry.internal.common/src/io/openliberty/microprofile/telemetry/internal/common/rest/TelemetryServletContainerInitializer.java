@@ -15,6 +15,8 @@ import java.util.Set;
 
 import org.osgi.service.component.annotations.Component;
 
+import com.ibm.ws.kernel.productinfo.ProductInfo;
+
 import jakarta.servlet.FilterRegistration;
 import jakarta.servlet.ServletContainerInitializer;
 import jakarta.servlet.ServletContext;
@@ -30,9 +32,13 @@ public class TelemetryServletContainerInitializer implements ServletContainerIni
     @Override
     public void onStartup(Set<Class<?>> c, ServletContext sc) throws ServletException {
         sc.addListener(TelemetryServletRequestListener.class);
-        FilterRegistration.Dynamic filterRegistration = sc.addFilter("io.openliberty.microprofile.telemetry.internal.rest.TelemetryServletFilter", TelemetryServletFilter.class);
-        filterRegistration.addMappingForUrlPatterns(null, true, "/*");
-        filterRegistration.setAsyncSupported(true);
+
+        // Beta fencing for HTTP tracing
+        if (ProductInfo.getBetaEdition()) {
+            FilterRegistration.Dynamic filterRegistration = sc.addFilter("io.openliberty.microprofile.telemetry.internal.rest.TelemetryServletFilter", TelemetryServletFilter.class);
+            filterRegistration.addMappingForUrlPatterns(null, true, "/*");
+            filterRegistration.setAsyncSupported(true);
+        }
     }
 
 }
