@@ -50,6 +50,13 @@ public class OpenTelemetryAccessor {
         return openTelemetryInfo.orElseGet(ErrorOpenTelemetryInfo::new);
     }
 
+    public static OpenTelemetryInfo getServerOpenTelemetryInfo() {
+        Optional<OpenTelemetryInfo> openTelemetryInfo = openTelemetryInfoFactoryService.call((factory) -> {
+            return factory.getServerOpenTelemetryInfo();
+        });
+        return openTelemetryInfo.orElseGet(ErrorOpenTelemetryInfo::new);
+    }
+
     /**
      * Gets or creates a tracer instance from the TracerProvider for the OpenTelemetry instance associated with this application.
      *

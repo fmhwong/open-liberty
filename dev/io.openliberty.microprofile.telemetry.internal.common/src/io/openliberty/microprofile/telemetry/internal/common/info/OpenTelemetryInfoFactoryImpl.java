@@ -16,10 +16,7 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 import org.apache.commons.lang3.concurrent.LazyInitializer;
 import org.eclipse.microprofile.config.Config;
@@ -41,8 +38,8 @@ import com.ibm.ws.runtime.metadata.MetaDataSlot;
 import com.ibm.ws.threadContext.ComponentMetaDataAccessorImpl;
 
 import io.openliberty.microprofile.telemetry.internal.common.AgentDetection;
-import io.openliberty.microprofile.telemetry.internal.interfaces.OpenTelemetryInfoFactory;
 import io.openliberty.microprofile.telemetry.internal.common.constants.OpenTelemetryConstants;
+import io.openliberty.microprofile.telemetry.internal.interfaces.OpenTelemetryInfoFactory;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -91,8 +88,11 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
     @Override
     public OpenTelemetryInfo getOpenTelemetryInfo() {
         try {
-            ApplicationMetaData metaData = ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData().getModuleMetaData().getApplicationMetaData();
-
+            ApplicationMetaData metaData = null;
+            ComponentMetaData cmd = ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData();
+            if (cmd != null) {
+                metaData = cmd.getModuleMetaData().getApplicationMetaData();
+            }
             return getOpenTelemetryInfo(metaData);
         } catch (Exception e) {
             Tr.error(tc, Tr.formatMessage(tc, "CWMOT5002.telemetry.error", e));
@@ -123,9 +123,12 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
         }
     }
 
-    private OpenTelemetryInfo createOpenTelemetryInfo() {
+    public OpenTelemetryInfo createOpenTelemetryInfo() {
         try {
-            String appName = ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData().getJ2EEName().getApplication();
+            String appName = "SERVER";
+            if (ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData() != null) {
+                appName = ComponentMetaDataAccessorImpl.getComponentMetaDataAccessor().getComponentMetaData().getJ2EEName().getApplication();
+            }
 
             if (AgentDetection.isAgentActive()) {
                 // If we're using the agent, it will have set GlobalOpenTelemetry and we must use its instance
@@ -137,10 +140,15 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
 
             //Builds tracer provider if user has enabled tracing aspects with config properties
             if (!checkDisabled(telemetryProperties)) {
+//                OpenTelemetry openTelemetry = AccessController.doPrivileged((PrivilegedAction<OpenTelemetry>) () -> {
+//                    return openTelemetryVersionedConfiguration.getPartiallyConfiguredOpenTelemetrySDKBuilder().addPropertiesCustomizer(x -> telemetryProperties) //Overrides OpenTelemetry's property order
+//                                                              .addResourceCustomizer(OpenTelemetryInfoFactoryImpl::customizeResource) //Defaults service name to application name
+//                                                              .setServiceClassLoader(Thread.currentThread().getContextClassLoader()).build().getOpenTelemetrySdk();
                 OpenTelemetry openTelemetry = AccessController.doPrivileged((PrivilegedAction<OpenTelemetry>) () -> {
                     return openTelemetryVersionedConfiguration.getPartiallyConfiguredOpenTelemetrySDKBuilder().addPropertiesCustomizer(x -> telemetryProperties) //Overrides OpenTelemetry's property order
-                                                          .addResourceCustomizer(OpenTelemetryInfoFactoryImpl::customizeResource) //Defaults service name to application name
-                                                          .setServiceClassLoader(Thread.currentThread().getContextClassLoader()).build().getOpenTelemetrySdk();
+                                                              .addResourceCustomizer(OpenTelemetryInfoFactoryImpl::customizeResource) //Defaults service name to application name
+//                                                              .setServiceClassLoader(Thread.currentThread().getContextClassLoader())
+                                                              .build().getOpenTelemetrySdk();
                 });
 
                 if (openTelemetry != null) {
@@ -190,7 +198,7 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
                 if (propertyName.startsWith("otel") || propertyName.startsWith("OTEL")) {
                     String normalizedName = propertyName.toLowerCase().replace('_', '.');
                     config.getOptionalValue(normalizedName, String.class)
-                        .ifPresent(value -> telemetryProperties.put(normalizedName, value));
+                          .ifPresent(value -> telemetryProperties.put(normalizedName, value));
                 }
             }
 
@@ -210,7 +218,8 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
         ExtendedApplicationInfo extAppInfo = (ExtendedApplicationInfo) appInfo;
         OpenTelemetryInfoReference oTelRef = (OpenTelemetryInfoReference) extAppInfo.getMetaData().getMetaData(slotForOpenTelemetryInfoHolder);
 
-        LazyInitializer<OpenTelemetryInfo> newSupplier = LazyInitializer.<OpenTelemetryInfo>builder().setInitializer(this::createOpenTelemetryInfo).setCloser(info -> info.dispose()).get();
+        LazyInitializer<OpenTelemetryInfo> newSupplier = LazyInitializer.<OpenTelemetryInfo> builder().setInitializer(this::createOpenTelemetryInfo)
+                                                                        .setCloser(info -> info.dispose()).get();
 
         if (oTelRef == null) {
             oTelRef = new OpenTelemetryInfoReference();
@@ -230,8 +239,8 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
         ExtendedApplicationInfo extAppInfo = (ExtendedApplicationInfo) appInfo;
         OpenTelemetryInfoReference oTelRef = (OpenTelemetryInfoReference) extAppInfo.getMetaData().getMetaData(slotForOpenTelemetryInfoHolder);
 
-        LazyInitializer<OpenTelemetryInfo> newSupplier = LazyInitializer.<OpenTelemetryInfo>builder().setInitializer(OpenTelemetryInfoFactoryImpl::createDisposedOpenTelemetryInfo)
-                                                                                  .setCloser(info -> info.dispose()).get();
+        LazyInitializer<OpenTelemetryInfo> newSupplier = LazyInitializer.<OpenTelemetryInfo> builder().setInitializer(OpenTelemetryInfoFactoryImpl::createDisposedOpenTelemetryInfo)
+                                                                        .setCloser(info -> info.dispose()).get();
 
         LazyInitializer<OpenTelemetryInfo> oldSupplier = oTelRef.getAndSet(newSupplier);
 
@@ -266,6 +275,7 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
 
     public interface OpenTelemetryVersionedConfiguration {
         public AutoConfiguredOpenTelemetrySdkBuilder getPartiallyConfiguredOpenTelemetrySDKBuilder();
+
         public Map<String, String> getTelemetryPropertyDefaults();
     }
 
@@ -281,5 +291,12 @@ public class OpenTelemetryInfoFactoryImpl implements ApplicationStateListener, O
     private class OpenTelemetryInfoReference extends AtomicReference<LazyInitializer<OpenTelemetryInfo>> {
 
         private static final long serialVersionUID = -4884222080590544495L;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public OpenTelemetryInfo getServerOpenTelemetryInfo() {
+        // TODO Auto-generated method stub
+        return createOpenTelemetryInfo();
     }
 }

@@ -51,11 +51,13 @@ public class OpenTelemetryHandler extends Collector {
     @Activate
     protected void activate(ComponentContext cc, Map<String, Object> configuration) {
         System.out.println("IN ACTIVATE!");
-        this.openTelemetry = AutoConfiguredOpenTelemetrySdk.initialize().getOpenTelemetrySdk();
-        System.out.println("OpenTelemetry: " + openTelemetry);
+//        this.openTelemetry = AutoConfiguredOpenTelemetrySdk.initialize().getOpenTelemetrySdk();
         
-        OpenTelemetryInfo openTelemetryInfo = OpenTelemetryAccessor.getOpenTelemetryInfo();
-         LoggerProvider logProvider = openTelemetryInfo.getOpenTelemetry().getLogsBridge();
+//        OpenTelemetryInfo openTelemetryInfo = OpenTelemetryAccessor.getOpenTelemetryInfo();
+        OpenTelemetryInfo openTelemetryInfo = OpenTelemetryAccessor.getServerOpenTelemetryInfo();
+        OpenTelemetry openTelemetry = openTelemetryInfo.getOpenTelemetry();
+        System.out.println("OpenTelemetry: " + openTelemetry);
+        LoggerProvider logProvider = openTelemetry.getLogsBridge();
          
          
         LogRecordBuilder builder = logProvider.loggerBuilder(getHandlerName()).build().logRecordBuilder();
